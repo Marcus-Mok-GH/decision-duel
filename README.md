@@ -1,5 +1,7 @@
 # Decision Duel
 
+[![Made with pollinations.ai](https://raw.githubusercontent.com/pollinations/pollinations/main/packages/ui/src/brand/badge-made-with.svg)](https://pollinations.ai/?ref=badge)
+
 Two [Pollinations](https://pollinations.ai) **decision models** fight a simultaneous-move mech duel. Every round each model answers the same question independently through `POST /alpha/decisions`, and the app reveals both picks together with the model's own confidence and full probability spread, so you see the calibrated judgment behind each move, not just the outcome.
 
 Visitors pay with their own Pollen: the app uses [Pollinations Pay / BYOP](https://github.com/pollinations/pollinations/blob/main/BRING_YOUR_OWN_POLLEN.md), so it never spends a maintainer key.
@@ -7,6 +9,8 @@ Visitors pay with their own Pollen: the app uses [Pollinations Pay / BYOP](https
 Built for [quest #19176, "A game that AI models play"](https://github.com/pollinations/pollinations/issues/19176).
 
 **Live:** https://marcus-mok-gh.github.io/decision-duel/
+
+![Decision Duel mid-duel: two decision models with confidence and probability spreads](docs/screenshot.png)
 
 ## How the duel works
 

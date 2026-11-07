@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Decision Duel — models fight with calibrated choices</title>
+<meta name="description" content="Two Pollinations decision models duel in a simultaneous-move mech fight. Every move comes with the model's own confidence and probability spread, paid with the visitor's own Pollen." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚔️</text></svg>" />
+<style>
+  :root {
+    --bg: #08090d;
+    --panel: #10131c;
+    --panel-2: #161a26;
+    --line: #242a3a;
+    --text: #e8ecf7;
+    --dim: #99a1b6;
+    --left: #4fd1c5;
+    --right: #f0857a;
+    --gold: #f5c451;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(1100px 620px at 12% -10%, rgba(79,209,197,.14), transparent 60%),
+      radial-gradient(1000px 600px at 92% 0%, rgba(240,133,122,.13), transparent 58%),
+      var(--bg);
+    color: var(--text);
+    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    padding: 22px 16px 48px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  header.top { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand h1 { font-size: 20px; margin: 0; letter-spacing: .3px; }
+  .brand .tag { font-size: 12px; color: var(--dim); margin-top: 2px; }
+  .logo { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: linear-gradient(145deg, #1d2434, #0d1119); border: 1px solid var(--line); font-size: 17px; }
+  .connect-slot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pill { font-size: 12px; color: var(--dim); border: 1px solid var(--line); padding: 6px 10px; border-radius: 999px; background: var(--panel); }
+  .card { background: linear-gradient(180deg, var(--panel), var(--panel-2)); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+  .setup { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  @media (max-width: 760px) { .setup { grid-template-columns: 1fr; } }
+  .fighter { display: flex; flex-direction: column; gap: 10px; }
+  .fighter .who { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .dot.l { background: var(--left); box-shadow: 0 0 12px var(--left); }
+  .dot.r { background: var(--right); box-shadow: 0 0 12px var(--right); }
+  label.small { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--dim); }
+  select, .btn {
+    width: 100%; background: #0b0e15; color: var(--text); border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 14px;
+  }
+  select:focus-visible, .btn:focus-visible { outline: 2px solid var(--left); outline-offset: 2px; }
+  .btn { cursor: pointer; transition: transform .06s ease, border-color .15s ease, background .15s ease; }
+  .btn:hover:not(:disabled) { border-color: #3a4359; transform: translateY(-1px); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.primary { background: linear-gradient(180deg, #1f2b3f, #151c2b); border-color: #33425c; font-weight: 600; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+  .actions .btn { width: auto; min-width: 140px; }
+
+  /* arena */
+  .arena { margin-top: 16px; }
+  .hprow { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; margin-bottom: 14px; }
+  .hp { display: flex; flex-direction: column; gap: 6px; }
+  .hp .name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hp .name.right { text-align: right; }
+  .bar { height: 12px; border-radius: 999px; background: #0a0d13; border: 1px solid var(--line); overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 100%; transition: width .45s cubic-bezier(.2,.8,.2,1); }
+  .bar.left > i { background: linear-gradient(90deg, #2f8f88, var(--left)); }
+  .bar.right > i { background: linear-gradient(270deg, #9c4b42, var(--right)); margin-left: auto; }
+  .roundchip { font-size: 12px; color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+
+  .moves { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 760px) { .moves { grid-template-columns: 1fr; } }
+  .move { border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: #0c0f17; }
+  .move .mv { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+  .move .mv b { font-size: 17px; letter-spacing: .02em; }
+  .move .mv .conf { font-size: 12px; color: var(--dim); }
+  .probs { display: flex; flex-direction: column; gap: 6px; }
+  .prob { display: grid; grid-template-columns: 62px 1fr 46px; gap: 8px; align-items: center; font-size: 12px; color: var(--dim); }
+  .prob .track { height: 7px; border-radius: 999px; background: #0a0d13; border: 1px solid var(--line); overflow: hidden; }
+  .prob .track > i { display: block; height: 100%; width: 0; transition: width .4s ease; }
+  .prob.picked { color: var(--text); }
+  .prob.picked .track > i { background: linear-gradient(90deg, #3b6ea8, #7fb2ea); }
+  .prob:not(.picked) .track > i { background: #2b3346; }
+  .log { margin-top: 16px; }
+  .log h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: var(--dim); margin: 0 0 10px; }
+  .log ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow: auto; }
+  .log li { border-left: 3px solid var(--line); padding: 6px 0 6px 12px; font-size: 13.5px; color: #cdd4e5; }
+  .log li .r { color: var(--dim); font-size: 12px; margin-right: 8px; }
+  .log li.hit { border-left-color: var(--gold); }
+  .log li.finish { border-left-color: var(--gold); background: rgba(245,196,81,.06); }
+
+  .score { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .score .s { font-size: 12px; color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; background: #0b0e15; }
+  .notice { border: 1px solid #4a3718; background: rgba(245,196,81,.08); color: #f0dca8; border-radius: 12px; padding: 10px 12px; font-size: 13px; margin-top: 12px; }
+  .notice.err { border-color: #5a2626; background: rgba(240,133,122,.09); color: #f4c0ba; }
+  details.rules { margin-top: 14px; }
+  details.rules summary { cursor: pointer; color: var(--dim); font-size: 13px; }
+  details.rules table { border-collapse: collapse; margin-top: 10px; font-size: 13px; width: 100%; }
+  details.rules td, details.rules th { border: 1px solid var(--line); padding: 6px 8px; text-align: left; }
+  details.rules th { color: var(--dim); font-weight: 600; }
+  footer { margin-top: 22px; color: var(--dim); font-size: 12px; display: flex; gap: 14px; flex-wrap: wrap; }
+  footer a { color: #9fc6ff; text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="logo">⚔️</div>
+      <div>
+        <h1>Decision Duel</h1>
+        <div class="tag">Two decision models. Simultaneous moves. Every choice carries its own probability.</div>
+      </div>
+    </div>
+    <div class="connect-slot">
+      <span class="pill" id="balance-pill">No Pollen connected</span>
+      <!-- Pollinations Pay (BYOP): the visitor authorises their own Pollen. -->
+      <div id="connect-mount"></div>
+    </div>
+  </header>
+
+  <section class="card">
+    <div class="setup">
+      <div class="fighter">
+        <div class="who"><span class="dot l"></span> Model A</div>
+        <label class="small" for="model-a">Combatant</label>
+        <select id="model-a"></select>
+      </div>
+      <div class="fighter">
+        <div class="who"><span class="dot r"></span> Model B</div>
+        <label class="small" for="model-b">Combatant</label>
+        <select id="model-b"></select>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="start">Start duel</button>
+      <button class="btn" id="swap">Swap sides</button>
+      <button class="btn" id="auto" disabled>Auto-play</button>
+      <button class="btn" id="reset" disabled>Reset</button>
+    </div>
+    <div id="notice" class="notice" hidden></div>
+
+    <details class="rules">
+      <summary>Rules and scoring</summary>
+      <table>
+        <tr><th>Move</th><th>Effect</th></tr>
+        <tr><td>Attack</td><td>Deals 2 damage. A charged Attack deals 5 instead and spends the charge.</td></tr>
+        <tr><td>Block</td><td>Takes no damage from an Attack and counters for 1.</td></tr>
+        <tr><td>Charge</td><td>No damage this round; your next Attack is charged.</td></tr>
+      </table>
+      <p style="color:var(--dim);font-size:13px;margin:10px 0 0">
+        Both mechs start at 10 HP. Each round the two models answer the same question independently and reveal at the same time.
+        Fight lasts at most 14 rounds; the higher HP wins, and a tie goes to total damage dealt. Damage, HP, and arithmetic are
+        all resolved in code, the models only make the choice.
+      </p>
+    </details>
+  </section>
+
+  <section class="card arena">
+    <div class="hprow">
+      <div class="hp">
+        <div class="name" id="name-a">—</div>
+        <div class="bar left"><i id="hp-a" style="width:100%"></i></div>
+        <div class="name" id="hpnum-a" style="font-size:12px;color:var(--dim)">10 / 10 HP</div>
+      </div>
+      <div class="roundchip" id="round">Ready</div>
+      <div class="hp">
+        <div class="name right" id="name-b">—</div>
+        <div class="bar right"><i id="hp-b" style="width:100%"></i></div>
+        <div class="name right" id="hpnum-b" style="font-size:12px;color:var(--dim)">10 / 10 HP</div>
+      </div>
+    </div>
+
+    <div class="moves">
+      <div class="move">
+        <div class="mv"><b id="pick-a">Waiting</b><span class="conf" id="conf-a"></span></div>
+        <div class="probs" id="probs-a"></div>
+      </div>
+      <div class="move">
+        <div class="mv"><b id="pick-b">Waiting</b><span class="conf" id="conf-b"></span></div>
+        <div class="probs" id="probs-b"></div>
+      </div>
+    </div>
+
+    <div class="log">
+      <h2>Round log</h2>
+      <ol id="log"></ol>
+    </div>
+
+    <div class="score" id="tally"></div>
+  </section>
+
+  <footer>
+    <span>Powered by <a href="https://pollinations.ai" target="_blank" rel="noopener">Pollinations</a> decision models.</span>
+    <a href="https://gen.pollinations.ai/docs" target="_blank" rel="noopener">API docs</a>
+    <a href="https://enter.pollinations.ai/quests" target="_blank" rel="noopener">Pollen quests</a>
+    <a href="https://github.com/Marcus-Mok-GH/decision-duel" target="_blank" rel="noopener">Source</a>
+  </footer>
+</div>
+
+<script defer src="https://cdn.jsdelivr.net/npm/@pollinations/ui@0.1.0-alpha.20/dist/connect.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ── Config ────────────────────────────────────────────────────────────────
+  // Publishable App Key from enter.pollinations.ai → Keys → Apps. The page URL
+  // below must be listed as a Redirect URI on that key.
+  var APP_KEY = ""; // pk_... from enter.pollinations.ai → Keys → Apps (this page must be a Redirect URI)
+  var API = "https://gen.pollinations.ai";
+  var BUDGET = 10;      // Pollen cap per authorisation
+  var EXPIRY = 7;       // days
+  var START_HP = 10;
+  var MAX_ROUNDS = 14;
+
+  var FALLBACK_MODELS = [
+    { name: "typesafe/jev-1.14", title: "Jev 1.14" },
+    { name: "microsoft/microsoft-decision-1", title: "Microsoft-Decision-1" },
+    { name: "perplexity/pplx-decider-v1.2", title: "Decider v1.2" },
+    { name: "openai/gpt-6-luna-decisions", title: "GPT-6 Luna Decisions" },
+    { name: "vllm-sr/d3", title: "D3" },
+    { name: "liquid/d1", title: "Liquid D1" },
+    { name: "jaredpalmer/kev-4b", title: "Kev 4B" }
+  ];
+  var MOVES = ["attack", "block", "charge"];
+  var MOVE_LABEL = { attack: "Attack", block: "Block", charge: "Charge" };
+  var MOVE_BLURB = {
+    attack: "Deal 2 damage (5 if charged), but a Block counters you for 1",
+    block: "Take no damage from an Attack and counter for 1",
+    charge: "No damage now; your next Attack hits for 5"
+  };
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  var state = {
+    apiKey: null,
+    models: FALLBACK_MODELS.slice(),
+    phase: "idle",        // idle | fighting | over
+    round: 0,
+    hp: { a: START_HP, b: START_HP },
+    charge: { a: 0, b: 0 },
+    dealt: { a: 0, b: 0 },
+    sel: { a: null, b: null },
+    busy: false,
+    tally: loadTally()
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ── Pollinations Pay (BYOP) ───────────────────────────────────────────────
+  function mountConnect() {
+    var mount = $("connect-mount");
+    if (state.apiKey) {
+      mount.innerHTML = "";
+      var out = document.createElement("button");
+      out.className = "btn";
+      out.style.width = "auto";
+      out.textContent = "Disconnect";
+      out.onclick = function () {
+        state.apiKey = null;
+        setBalance(null);
+        mountConnect();
+        setNotice("Disconnected. Connect your Pollen to keep duelling.");
+      };
+      mount.appendChild(out);
+      return;
+    }
+    mount.innerHTML = "";
+    if (!APP_KEY) {
+      var hint = document.createElement("span");
+      hint.className = "pill";
+      hint.textContent = "App key not configured";
+      hint.title = "Set APP_KEY in index.html to the pk_... key from enter.pollinations.ai";
+      mount.appendChild(hint);
+      return;
+    }
+    var el = document.createElement("polli-connect");
+    el.setAttribute("app-key", APP_KEY);
+    el.setAttribute("budget", String(BUDGET));
+    el.setAttribute("expiry", String(EXPIRY));
+    el.setAttribute("models", "text");
+    el.addEventListener("change", function () {
+      var key = el.apiKey || null;
+      state.apiKey = key;
+      setBalance(key);
+      mountConnect();
+      if (key) clearNotice();
+    });
+    mount.appendChild(el);
+  }
+
+  function setBalance(key) {
+    var pill = $("balance-pill");
+    if (!key) {
+      pill.textContent = "No Pollen connected";
+      $("start").disabled = state.phase === "fighting";
+      render();
+      return;
+    }
+    pill.textContent = "Pollen connected";
+    // Balance is best-effort and never blocks play.
+    fetch(API + "/account/balance", { headers: { Authorization: "Bearer " + key } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        var b = d && (d.balance !== undefined ? d.balance : d.pollen);
+        if (typeof b === "number") pill.textContent = b.toFixed(2) + " Pollen connected";
+      })
+      .catch(function () {});
+    render();
+  }
+
+  // ── Models ────────────────────────────────────────────────────────────────
+  function loadModels() {
+    fetch(API + "/models", { headers: { Accept: "application/json" } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) return;
+        var items = Array.isArray(d) ? d : (d.data || d.models || []);
+        var decision = items.filter(function (m) {
+          return (m.category || "").toLowerCase() === "decision";
+        });
+        if (decision.length < 2) return;
+        state.models = decision.map(function (m) {
+          return { name: m.name, title: m.title || m.name };
+        });
+        fillSelect($("model-a"), 0);
+        fillSelect($("model-b"), Math.min(1, state.models.length - 1));
+      })
+      .catch(function () { /* fallback list already selected */ });
+  }
+
+  function fillSelect(sel, index) {
+    var current = sel.value;
+    sel.innerHTML = "";
+    state.models.forEach(function (m, i) {
+      var o = document.createElement("option");
+      o.value = m.name;
+      o.textContent = m.title;
+      if (i === index) o.selected = true;
+      sel.appendChild(o);
+    });
+    if (current) sel.value = current;
+  }
+
+  // ── Decisions ─────────────────────────────────────────────────────────────
+  function askMove(side) {
+    var model = $(side === "a" ? "model-a" : "model-b").value;
+    var me = state.hp[side], them = state.hp[side === "a" ? "b" : "a"];
+    var body = {
+      model: model,
+      state: {
+        game: "Decision Duel, a simultaneous-move mech duel",
+        round: state.round,
+        maxRounds: MAX_ROUNDS,
+        yourHp: me,
+        opponentHp: them,
+        yourHpPercent: Math.round((me / START_HP) * 100),
+        opponentHpPercent: Math.round((them / START_HP) * 100),
+        yourCharge: state.charge[side] > 0,
+        opponentChargeLikely: state.charge[side === "a" ? "b" : "a"] > 0,
+        yourDamageDealt: state.dealt[side],
+        opponentDamageDealt: state.dealt[side === "a" ? "b" : "a"],
+        history: recentHistory(),
+        winCondition: "Reduce the opponent to 0 HP, or lead on HP when round " + MAX_ROUNDS + " ends"
+      },
+      questions: {
+        move: {
+          type: "choice",
+          instructions: "Choose your move for this simultaneous round. You cannot see the opponent's pick.",
+          criteria: { attack: MOVE_BLURB.attack, block: MOVE_BLURB.block, charge: MOVE_BLURB.charge }
+        }
+      }
+    };
+    return fetch(API + "/alpha/decisions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + state.apiKey },
+      body: JSON.stringify(body)
+    }).then(function (r) {
+      return r.json().catch(function () { return null; }).then(function (data) {
+        if (!r.ok) {
+          var msg = (data && data.error && data.error.message) || ("Decision request failed (" + r.status + ")");
+          var err = new Error(msg);
+          err.status = r.status;
+          throw err;
+        }
+        var answer = data && data.answers && data.answers.move;
+        if (!answer || !answer.choice) throw new Error("The model returned no choice.");
+        return {
+          model: model,
+          choice: String(answer.choice).toLowerCase(),
+          confidence: typeof answer.confidence === "number" ? answer.confidence : null,
+          probabilities: answer.probabilities || null
+        };
+      });
+    });
+  }
+
+  function recentHistory() {
+    return Array.prototype.slice.call($("log").children).slice(-4).map(function (li) {
+      return li.getAttribute("data-summary") || li.textContent.trim();
+    });
+  }
+
+  // ── Resolution (all arithmetic in code) ───────────────────────────────────
+  function resolve(a, b) {
+    var dmg = { a: 0, b: 0 };
+    var notes = [];
+    function chargedHit(side) {
+      var amount = state.charge[side] > 0 ? 5 : 2;
+      if (state.charge[side] > 0) { state.charge[side] = 0; notes.push(side + ":charged"); }
+      return amount;
+    }
+    if (a === "attack" && b === "attack") {
+      dmg.a += 2; dmg.b += 2;
+    } else if (a === "attack" && b === "block") {
+      dmg.a += 1; // counter
+    } else if (a === "block" && b === "attack") {
+      dmg.b += 1;
+    } else if (a === "attack" && b === "charge") {
+      dmg.b += chargedHit("a");
+    } else if (a === "charge" && b === "attack") {
+      dmg.a += chargedHit("b");
+    } else if (a === "block" && b === "block") {
+      /* nothing lands */
+    } else if (a === "charge" && b === "charge") {
+      /* both bank a charge */
+    } else if (a === "block" && b === "charge") {
+      /* charge flies past a block */
+    } else if (a === "charge" && b === "block") {
+      /* same */
+    }
+    if (a === "charge" && dmg.a === 0) state.charge.a += 1;
+    if (b === "charge" && dmg.b === 0) state.charge.b += 1;
+    return { dmg: dmg, notes: notes };
+  }
+
+  // ── Rendering ─────────────────────────────────────────────────────────────
+  function render() {
+    var a = $("model-a").value, b = $("model-b").value;
+    var titleA = (state.models.find(function (m) { return m.name === a; }) || {}).title || a || "Model A";
+    var titleB = (state.models.find(function (m) { return m.name === b; }) || {}).title || b || "Model B";
+    $("name-a").textContent = titleA;
+    $("name-b").textContent = titleB;
+    $("hp-a").style.width = (state.hp.a / START_HP) * 100 + "%";
+    $("hp-b").style.width = (state.hp.b / START_HP) * 100 + "%";
+    $("hpnum-a").textContent = state.hp.a + " / " + START_HP + " HP";
+    $("hpnum-b").textContent = state.hp.b + " / " + START_HP + " HP";
+    $("round").textContent = state.phase === "over"
+      ? "Duel over"
+      : (state.phase === "fighting" ? "Round " + state.round + " / " + MAX_ROUNDS : "Ready");
+
+    var canStart = state.phase !== "fighting" && !state.busy;
+    $("start").disabled = !canStart;
+    $("start").textContent = state.phase === "over" ? "Rematch" : (state.phase === "fighting" ? "Duel in progress" : "Start duel");
+    $("auto").disabled = state.phase !== "fighting" || state.busy;
+    $("reset").disabled = state.phase === "idle" || state.busy;
+    $("swap").disabled = state.phase === "fighting" || state.busy;
+
+    renderMove("a", state.sel.a);
+    renderMove("b", state.sel.b);
+    $("tally").innerHTML = "";
+    state.tally.slice(0, 6).forEach(function (row) {
+      var s = document.createElement("span");
+      s.className = "s";
+      s.textContent = row;
+      $("tally").appendChild(s);
+    });
+  }
+
+  function renderMove(side, answer) {
+    var pick = $("pick-" + side), conf = $("conf-" + side), box = $("probs-" + side);
+    box.innerHTML = "";
+    if (!answer) {
+      pick.textContent = state.phase === "fighting" ? "Deciding…" : "Waiting";
+      conf.textContent = "";
+      return;
+    }
+    pick.textContent = MOVE_LABEL[answer.choice] || answer.choice;
+    conf.textContent = answer.confidence === null ? "" : Math.round(answer.confidence * 100) + "% confident";
+    var probs = answer.probabilities || {};
+    MOVES.forEach(function (mv) {
+      var p = typeof probs[mv] === "number" ? probs[mv] : null;
+      var row = document.createElement("div");
+      row.className = "prob" + (mv === answer.choice ? " picked" : "");
+      var label = document.createElement("span");
+      label.textContent = MOVE_LABEL[mv];
+      var track = document.createElement("span");
+      track.className = "track";
+      var fill = document.createElement("i");
+      fill.style.width = p === null ? "0%" : Math.max(2, Math.round(p * 100)) + "%";
+      track.appendChild(fill);
+      var val = document.createElement("span");
+      val.style.textAlign = "right";
+      val.textContent = p === null ? "—" : Math.round(p * 100) + "%";
+      row.appendChild(label); row.appendChild(track); row.appendChild(val);
+      box.appendChild(row);
+    });
+  }
+
+  function addLog(round, text, kind, summary) {
+    var li = document.createElement("li");
+    if (kind) li.className = kind;
+    var r = document.createElement("span");
+    r.className = "r";
+    r.textContent = "R" + round;
+    li.appendChild(r);
+    li.appendChild(document.createTextNode(text));
+    li.setAttribute("data-summary", summary || text);
+    var log = $("log");
+    log.insertBefore(li, log.firstChild);
+  }
+
+  function setNotice(msg, isErr) {
+    var n = $("notice");
+    if (!msg) { n.hidden = true; n.textContent = ""; return; }
+    n.hidden = false;
+    n.className = "notice" + (isErr ? " err" : "");
+    n.textContent = msg;
+  }
+  function clearNotice() { setNotice(""); }
+
+  // ── Game flow ─────────────────────────────────────────────────────────────
+  function resetGame(keepLog) {
+    state.phase = "idle";
+    state.round = 0;
+    state.hp = { a: START_HP, b: START_HP };
+    state.charge = { a: 0, b: 0 };
+    state.dealt = { a: 0, b: 0 };
+    state.sel = { a: null, b: null };
+    state.busy = false;
+    if (!keepLog) $("log").innerHTML = "";
+    render();
+  }
+
+  function startGame() {
+    clearNotice();
+    if (!state.apiKey) {
+      setNotice("Connect your Pollen first: the decision models bill the visitor's own account, so there is nothing to charge until you authorise.", true);
+      return;
+    }
+    resetGame(true);
+    state.phase = "fighting";
+    state.round = 1;
+    render();
+    playRound();
+  }
+
+  function playRound() {
+    if (state.busy) return;
+    state.busy = true;
+    state.sel = { a: null, b: null };
+    render();
+    Promise.all([askMove("a"), askMove("b")])
+      .then(function (answers) {
+        var A = answers[0], B = answers[1];
+        state.sel = { a: A, b: B };
+        var out = resolve(A.choice, B.choice);
+        state.hp.a = Math.max(0, state.hp.a - out.dmg.a);
+        state.hp.b = Math.max(0, state.hp.b - out.dmg.b);
+        state.dealt.a += out.dmg.b; // damage this side dealt
+        state.dealt.b += out.dmg.a;
+
+        var line = nameOf("a") + " " + label(A) + " vs " + nameOf("b") + " " + label(B) + ". ";
+        if (out.dmg.a === 0 && out.dmg.b === 0) line += "No damage lands.";
+        else line += "Damage: " + nameOf("b") + " -" + out.dmg.b + ", " + nameOf("a") + " -" + out.dmg.a + ".";
+        addLog(state.round, line, (out.dmg.a || out.dmg.b) ? "hit" : null,
+          "R" + state.round + " " + A.choice + "/" + B.choice + " dmg " + out.dmg.b + "/" + out.dmg.a);
+
+        state.busy = false;
+        if (state.hp.a <= 0 || state.hp.b <= 0 || state.round >= MAX_ROUNDS) {
+          finish();
+        } else {
+          state.round += 1;
+          render();
+        }
+      })
+      .catch(function (err) {
+        state.busy = false;
+        state.phase = "idle";
+        render();
+        if (err && err.status === 402) {
+          setNotice("That move ran past the Pollen budget you authorised. Raise the budget on the Connect button, or top up at enter.pollinations.ai.", true);
+        } else if (err && err.status === 401) {
+          setNotice("Your Pollen authorisation expired or was revoked. Reconnect to keep duelling.", true);
+        } else {
+          setNotice((err && err.message) || "The duel hit an error. Try again.", true);
+        }
+      });
+  }
+
+  function label(answer) { return (MOVE_LABEL[answer.choice] || answer.choice); }
+  function nameOf(side) {
+    var sel = $(side === "a" ? "model-a" : "model-b");
+    var m = state.models.find(function (x) { return x.name === sel.value; });
+    return (m && m.title) || sel.value || (side === "a" ? "Model A" : "Model B");
+  }
+
+  function finish() {
+    state.phase = "over";
+    var winner, text;
+    if (state.hp.a === state.hp.b) {
+      if (state.dealt.a === state.dealt.b) { winner = "draw"; text = "Dead even: both mechs stand after " + (state.round) + " rounds."; }
+      else if (state.dealt.a > state.dealt.b) { winner = "a"; text = "HP is level, so it goes to damage dealt: " + nameOf("a") + " wins."; }
+      else { winner = "b"; text = "HP is level, so it goes to damage dealt: " + nameOf("b") + " wins."; }
+    } else if (state.hp.a > state.hp.b) { winner = "a"; text = nameOf("a") + " wins with " + state.hp.a + " HP left."; }
+    else { winner = "b"; text = nameOf("b") + " wins with " + state.hp.b + " HP left."; }
+
+    addLog(state.round, text, "finish", "WIN " + (winner === "draw" ? "draw" : nameOf(winner)));
+    if (winner !== "draw") {
+      var row = (winner === "a" ? nameOf("a") : nameOf("b")) + " beat " + (winner === "a" ? nameOf("b") : nameOf("a")) + " · " + state.round + " rounds";
+      state.tally.unshift(row);
+      state.tally = state.tally.slice(0, 12);
+      saveTally(state.tally);
+    }
+    render();
+  }
+
+  // ── Series tally (local only) ─────────────────────────────────────────────
+  function loadTally() {
+    try { return JSON.parse(localStorage.getItem("decision-duel:tally") || "[]").slice(0, 12); }
+    catch (e) { return []; }
+  }
+  function saveTally(t) {
+    try { localStorage.setItem("decision-duel:tally", JSON.stringify(t)); } catch (e) {}
+  }
+
+  // ── Wiring ────────────────────────────────────────────────────────────────
+  function boot() {
+    fillSelect($("model-a"), 0);
+    fillSelect($("model-b"), 1);
+    mountConnect();
+    loadModels();
+    render();
+
+    $("start").addEventListener("click", startGame);
+    $("swap").addEventListener("click", function () {
+      var a = $("model-a").value;
+      $("model-a").value = $("model-b").value;
+      $("model-b").value = a;
+      render();
+    });
+    $("auto").addEventListener("click", function () {
+      if (state.phase !== "fighting" || state.busy) return;
+      playRound();
+    });
+    $("reset").addEventListener("click", function () {
+      resetGame(false);
+      clearNotice();
+      state.tally = loadTally();
+      render();
+    });
+    $("model-a").addEventListener("change", render);
+    $("model-b").addEventListener("change", render);
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+})();
+</script>
+</body>
+</html>

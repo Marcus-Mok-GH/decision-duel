@@ -29,8 +29,10 @@ Any decision model on Pollinations can take a side, including `typesafe/jev-1.14
 The header carries the drop-in `<polli-connect>` element from `@pollinations/ui`:
 
 ```html
-<polli-connect app-key="pk_..." budget="10" expiry="7" models="text"></polli-connect>
+<polli-connect app-key="pk_..." budget="10" expiry="7" models="decision"></polli-connect>
 ```
+
+`models="decision"` authorises the `decision` model category, which `POST /alpha/decisions` requires (a `text` permission does not cover that endpoint).
 
 `app-key` is a publishable App Key created at [enter.pollinations.ai/keys](https://enter.pollinations.ai/keys) → **Apps**, with this page's URL (no query or fragment) as a **Redirect URI**. The widget hands back the visitor's scoped `sk_...` key, which the app sends as `Authorization: Bearer` on decision calls. Nothing is spent until a visitor connects, and their budget and expiry stay under their control.
 

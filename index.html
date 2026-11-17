@@ -234,11 +234,11 @@
   var MAX_ROUNDS = 14;
 
   var FALLBACK_MODELS = [
-    { name: "typesafe/jev-1.14", title: "Jev 1.14" },
     { name: "microsoft/microsoft-decision-1", title: "Microsoft-Decision-1" },
+    { name: "vllm-sr/d3", title: "D3" },
+    { name: "typesafe/jev-1.14", title: "Jev 1.14" },
     { name: "perplexity/pplx-decider-v1.2", title: "Decider v1.2" },
     { name: "openai/gpt-6-luna-decisions", title: "GPT-6 Luna Decisions" },
-    { name: "vllm-sr/d3", title: "D3" },
     { name: "liquid/d1", title: "Liquid D1" },
     { name: "jaredpalmer/kev-4b", title: "Kev 4B" }
   ];
@@ -339,6 +339,8 @@
           return (m.category || "").toLowerCase() === "decision";
         });
         if (decision.length < 2) return;
+        // Free models first, so the default duel works without paid Pollen.
+        decision.sort(function (a, b) { return (a.paid_only ? 1 : 0) - (b.paid_only ? 1 : 0); });
         state.models = decision.map(function (m) {
           return { name: m.name, title: m.title || m.name };
         });
